@@ -1,0 +1,7 @@
+# dsh-project-kanban bundle patch: inserts the project-kanban row into the
+# profile roster. The host half (exports ".") serves /project-kanban/* and
+# keeps the board in ~/.dsh/project-kanban/board.json; the browser half
+# (lib/client.js) adds the sidebar entry and the main board view.
+- insert:
+    - id: project-kanban
+      name: dsh-project-kanban

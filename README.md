@@ -2,6 +2,22 @@
 
 DeepSeek Harness (DSH) 插件：左侧边栏出现「项目看板」入口，点开后在主区域按项目分区管理任务。每个项目固定四列：**待办 → 进行中 → 待反馈 → 已完成**。
 
+## 截图
+
+![浅色主题：按项目分区的四列看板](docs/images/board-light.png)
+
+![深色主题（自动跟随 DSH 主题）](docs/images/board-dark.png)
+
+| 任务菜单：移动到各列 | 编辑任务 |
+| --- | --- |
+| ![任务菜单](docs/images/card-menu-light.png) | ![编辑任务](docs/images/edit-task-light.png) |
+
+| 项目菜单：重命名、颜色、排序、删除 | 空状态引导 |
+| --- | --- |
+| ![项目菜单](docs/images/project-menu-dark.png) | ![空状态](docs/images/empty-light.png) |
+
+窄屏下四列会自动变成 2×2（见 `docs/images/narrow-light.png`）。以上图片为演示数据。
+
 ## 功能
 
 - **侧边栏入口**：图标 + 「项目看板」，位于「插件市场」与「定时任务」之间。

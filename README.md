@@ -4,6 +4,20 @@ DeepSeek Harness (DSH) 插件：左侧边栏出现「项目看板」入口，点
 
 ## 截图
 
+先看项目主页（每个项目一个区块、四列任务），再点进一个项目看它的「数据与结果」页。
+
+![项目主页：每个项目一个区块、四列任务，标题栏有「数据与结果」入口](docs/images/board-light.png)
+
+| 深色主题 | 任务菜单 | 编辑任务 |
+| --- | --- | --- |
+| ![深色看板](docs/images/board-dark.png) | ![任务菜单](docs/images/card-menu-light.png) | ![编辑任务](docs/images/edit-task-light.png) |
+
+| 项目菜单 | 空状态 | 窄屏 |
+| --- | --- | --- |
+| ![项目菜单](docs/images/project-menu-dark.png) | ![空状态](docs/images/empty-light.png) | ![窄屏](docs/images/narrow-light.png) |
+
+点项目名进入这个项目的「数据与结果」页：
+
 ![数据与结果：左边数据树，右边结果树，悬停一个结果，它的来源数据和连线亮起](docs/images/records-tree-light.png)
 
 ![只看星标：同一棵树的筛选视图，星标节点之间的线是浅红色](docs/images/records-staronly-light.png)
@@ -23,16 +37,6 @@ DeepSeek Harness (DSH) 插件：左侧边栏出现「项目看板」入口，点
 | 选中多项，合并为分组 | 深色主题 |
 | --- | --- |
 | ![多选合并](docs/images/records-merge-light.png) | ![深色主题](docs/images/records-dark.png) |
-
-![项目看板：每个项目四列，标题栏有「数据与结果」入口](docs/images/board-light.png)
-
-| 深色主题 | 任务菜单 | 编辑任务 |
-| --- | --- | --- |
-| ![深色看板](docs/images/board-dark.png) | ![任务菜单](docs/images/card-menu-light.png) | ![编辑任务](docs/images/edit-task-light.png) |
-
-| 项目菜单 | 空状态 | 窄屏 |
-| --- | --- | --- |
-| ![项目菜单](docs/images/project-menu-dark.png) | ![空状态](docs/images/empty-light.png) | ![窄屏](docs/images/narrow-light.png) |
 
 以上图片均为演示数据。
 

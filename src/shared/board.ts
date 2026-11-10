@@ -11,6 +11,11 @@
  * @module dsh-project-kanban/shared/board
  */
 
+import { ID_PATTERN, cleanLine } from './text'
+import { applyRecordOp, sanitizeRecords, EMPTY_RECORDS, type ProjectRecords, type RecordOp } from './records'
+
+export { ID_PATTERN, cleanLine }
+
 /** The four fixed columns, in board order. */
 export const COLUMNS = ['todo', 'doing', 'review', 'done'] as const
 
@@ -40,9 +45,6 @@ export const LIMITS = {
   tasksPerProject: 2000,
 } as const
 
-/** Ids are short, URL-safe strings made by the browser. */
-export const ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/
-
 /** One task card. */
 export interface Task {
   id: string
@@ -69,6 +71,11 @@ export interface Project {
    * tasks of that column in this array.
    */
   tasks: Task[]
+  /**
+   * The project's data and result trees and the links between them. Absent
+   * until something is recorded; read it with {@link recordsOf}.
+   */
+  records?: ProjectRecords
 }
 
 /** The whole stored board. */
@@ -98,6 +105,8 @@ export type Op =
   | { type: 'task.move'; projectId: string; taskId: string; to: ColumnId; beforeTaskId?: string | null; at?: string }
   /** Put a deleted task back (undo), at its old index when possible. */
   | { type: 'task.restore'; projectId: string; task: Task; index: number }
+  /** Data / result trees and links of a project; see `shared/records.ts`. */
+  | RecordOp
 
 /** Result of applying one op. */
 export type ApplyResult = { ok: true; board: Board } | { ok: false; board: Board; reason: string }
@@ -127,18 +136,6 @@ export function isColor(value: unknown): value is ProjectColor {
 }
 
 /**
- * Trim and collapse a one-line text; undefined when empty or too long.
- * @param value - untrusted input.
- * @param max - maximum length after trimming.
- */
-export function cleanLine(value: unknown, max: number): string | undefined {
-  if (typeof value !== 'string') return undefined
-  const text = value.replace(/\s+/g, ' ').trim()
-  if (text === '' || text.length > max) return undefined
-  return text
-}
-
-/**
  * Normalise a multi-line note; undefined when not a string or too long.
  * @param value - untrusted input.
  */
@@ -151,6 +148,11 @@ export function cleanNote(value: unknown): string | undefined {
 /** Tasks of one column, in display order. */
 export function tasksIn(project: Project, column: ColumnId): Task[] {
   return project.tasks.filter((task) => task.column === column)
+}
+
+/** The data and result records of a project (empty when nothing is recorded). */
+export function recordsOf(project: Project): ProjectRecords {
+  return project.records ?? EMPTY_RECORDS
 }
 
 /** Count tasks per column. */
@@ -336,6 +338,30 @@ export function applyOp(board: Board, op: Op): ApplyResult {
         }),
       }
     }
+    case 'node.add':
+    case 'node.update':
+    case 'node.move':
+    case 'node.delete':
+    case 'node.restore':
+    case 'link.add':
+    case 'link.update':
+    case 'link.delete':
+    case 'relation.add':
+    case 'relation.update':
+    case 'relation.delete':
+    case 'category.add':
+    case 'category.update':
+    case 'category.delete':
+    case 'palette.update': {
+      const project = findProject(op.projectId)
+      if (!project) return refuse(board, '项目不存在')
+      const before = recordsOf(project)
+      const result = applyRecordOp(before, op, timeOf(op as { at?: string }))
+      if (!result.ok) return refuse(board, result.reason)
+      // Nothing changed: hand back the very same board so no revision is spent.
+      if (result.records === before) return { ok: true, board }
+      return { ok: true, board: withProject(board, project.id, (p) => ({ ...p, records: result.records })) }
+    }
     default:
       return refuse(board, '未知操作')
   }
@@ -397,6 +423,7 @@ export function sanitizeBoard(value: unknown): Board {
         tasks.push(task)
       }
     }
+    const records = sanitizeRecords(p.records)
     board.projects.push({
       id: p.id,
       name,
@@ -404,13 +431,14 @@ export function sanitizeBoard(value: unknown): Board {
       collapsed: p.collapsed === true,
       createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date().toISOString(),
       tasks,
+      ...(records ? { records } : {}),
     })
   }
   return board
 }
 
 /** A fresh random id (browser and Node both have crypto.getRandomValues). */
-export function newId(prefix: 'p' | 't'): string {
+export function newId(prefix: 'p' | 't' | 'n' | 'l' | 'c'): string {
   const bytes = new Uint8Array(8)
   globalThis.crypto.getRandomValues(bytes)
   let text = ''

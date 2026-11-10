@@ -1,7 +1,7 @@
 {
   "name": "dsh-project-kanban",
-  "description": "Project kanban for the DeepSeek Harness (dsh) web GUI: a sidebar entry opens a board grouped by project, each with four fixed columns (待办 / 进行中 / 待反馈 / 已完成). Add projects and tasks; one click advances a task to the next column.",
-  "version": "0.1.0",
+  "description": "Project kanban for the DeepSeek Harness (dsh) web GUI: a sidebar entry opens a board grouped by project, each with four fixed columns (待办 / 进行中 / 待反馈 / 已完成), and each project has a page for its key data and results — two trees you can arrange by drag and drop, with links that show which result came from which data.",
+  "version": "0.2.0",
   "type": "module",
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -59,11 +59,14 @@
   ],
   "license": "Apache-2.0",
   "keywords": [
+    "data-tree",
     "deepseek-harness",
     "dsh",
     "dsh-plugin",
     "kanban",
     "project-board",
+    "provenance",
+    "results",
     "todo"
   ],
   "scripts": {

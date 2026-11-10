@@ -21,6 +21,7 @@ export const inject: string[] = []
 export { createFileStore, createMemoryStore, defaultBoardPath } from './store'
 export { serveKanban } from './routes'
 export * from './shared/board'
+export * from './shared/records'
 export * from './shared/protocol'
 
 /** Mount the host half. */

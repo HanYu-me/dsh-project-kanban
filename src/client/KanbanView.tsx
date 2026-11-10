@@ -3,19 +3,7 @@
  * with the four fixed columns. All changes go through {@link BoardSync}.
  * @module dsh-project-kanban/client/KanbanView
  */
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type DragEvent,
-  type KeyboardEvent,
-  type ReactNode,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 import {
   COLUMNS,
   COLUMN_LABELS,
@@ -23,6 +11,7 @@ import {
   PROJECT_COLORS,
   columnCounts,
   newId,
+  recordsOf,
   nextColumn,
   tasksIn,
   type Board,
@@ -32,7 +21,10 @@ import {
   type ProjectColor,
   type Task,
 } from '../shared/board'
-import type { BoardSync, SyncStatus } from './sync'
+import { recordCounts } from '../shared/records'
+import { Actions, COLOR_NAMES, COLOR_VALUES, Menu, SaveStatus, shortDate, useActions, type BoardActions, type Toast } from './common'
+import { RecordsPage } from './RecordsView'
+import type { BoardSync } from './sync'
 import {
   AlertIcon,
   ArrowDownIcon,
@@ -47,148 +39,19 @@ import {
   NoteIcon,
   PencilIcon,
   PlusIcon,
+  RecordsIcon,
   StatusIcon,
   TrashIcon,
   UndoIcon,
 } from './icons'
 
-/** CSS colour of each project accent. */
-export const COLOR_VALUES: Record<ProjectColor, string> = {
-  blue: '#4d6bfe',
-  violet: '#8b5cf6',
-  green: '#22a06b',
-  amber: '#e09400',
-  rose: '#e5484d',
-  teal: '#0ea5a4',
-  slate: '#64748b',
-}
-
-const COLOR_NAMES: Record<ProjectColor, string> = {
-  blue: '蓝',
-  violet: '紫',
-  green: '绿',
-  amber: '橙',
-  rose: '红',
-  teal: '青',
-  slate: '灰',
-}
+export { COLOR_VALUES, shortDate }
 
 const EMPTY_HINTS: Record<ColumnId, string> = {
   todo: '暂无待办',
   doing: '标记待办完成后会来到这里',
   review: '等待反馈的任务',
   done: '完成的任务会出现在这里',
-}
-
-// ---------------------------------------------------------------- context
-
-interface Toast {
-  id: number
-  text: string
-  tone?: 'error'
-  action?: { label: string; run: () => void }
-}
-
-interface BoardActions {
-  dispatch(op: Op): boolean
-  toast(text: string, options?: { tone?: 'error'; action?: Toast['action'] }): void
-  /** Briefly highlight a card after it moved. */
-  land(taskId: string): void
-  landedId: string | null
-  drag: { current: { projectId: string; taskId: string } | null }
-  confirm(options: { title: string; body: string; confirmLabel: string; onConfirm: () => void }): void
-}
-
-const Actions = createContext<BoardActions | null>(null)
-
-function useActions(): BoardActions {
-  const value = useContext(Actions)
-  if (!value) throw new Error('KanbanView context missing')
-  return value
-}
-
-// ---------------------------------------------------------------- helpers
-
-function pad(n: number): string {
-  return String(n).padStart(2, '0')
-}
-
-/** Short local date, with the time for today. */
-export function shortDate(iso: string | undefined, now: Date = new Date()): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  const sameDay = d.toDateString() === now.toDateString()
-  if (sameDay) return `今天 ${pad(d.getHours())}:${pad(d.getMinutes())}`
-  const md = `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-  return d.getFullYear() === now.getFullYear() ? md : `${d.getFullYear()}-${md}`
-}
-
-/** Close on outside pointer-down and Escape. */
-function useDismiss(open: boolean, close: () => void): React.RefObject<HTMLDivElement> {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const onDown = (event: PointerEvent): void => {
-      if (ref.current && !ref.current.contains(event.target as Node)) close()
-    }
-    const onKey = (event: globalThis.KeyboardEvent): void => {
-      if (event.key === 'Escape') close()
-    }
-    document.addEventListener('pointerdown', onDown, true)
-    document.addEventListener('keydown', onKey, true)
-    return () => {
-      document.removeEventListener('pointerdown', onDown, true)
-      document.removeEventListener('keydown', onKey, true)
-    }
-  }, [open, close])
-  return ref
-}
-
-// ---------------------------------------------------------------- menu
-
-function Menu({ label, children, onOpenChange }: { label: string; children: (close: () => void) => ReactNode; onOpenChange?: (open: boolean) => void }) {
-  const [open, setOpen] = useState(false)
-  const set = useCallback(
-    (value: boolean) => {
-      setOpen(value)
-      onOpenChange?.(value)
-    },
-    [onOpenChange],
-  )
-  const trigger = useRef<HTMLButtonElement>(null)
-  const menu = useRef<HTMLDivElement>(null)
-  const close = useCallback(() => {
-    set(false)
-    trigger.current?.focus()
-  }, [set])
-  const ref = useDismiss(open, close)
-  const items = (): HTMLElement[] => Array.from(menu.current?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not(:disabled)') ?? [])
-  useEffect(() => {
-    if (open) items()[0]?.focus()
-  }, [open])
-  const onMenuKey = (event: KeyboardEvent): void => {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return
-    event.preventDefault()
-    const list = items()
-    if (list.length === 0) return
-    const current = list.indexOf(document.activeElement as HTMLElement)
-    const next =
-      event.key === 'Home' ? 0 : event.key === 'End' ? list.length - 1 : event.key === 'ArrowDown' ? (current + 1) % list.length : (current - 1 + list.length) % list.length
-    list[next]?.focus()
-  }
-  return (
-    <div className="kb-menu-anchor" ref={ref}>
-      <button ref={trigger} type="button" className="kb-icon-btn" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} onClick={() => set(!open)}>
-        <MoreIcon />
-      </button>
-      {open ? (
-        <div className="kb-menu" role="menu" aria-label={label} ref={menu} onKeyDown={onMenuKey}>
-          {children(close)}
-        </div>
-      ) : null}
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------- task editor
@@ -484,6 +347,12 @@ function FragmentWithLine({ show, line, children }: { show: boolean; line: React
 
 // ---------------------------------------------------------------- project
 
+/** What the "delete project" dialog says goes with the project. */
+export function deleteBody(tasks: number, recorded: number): string {
+  const parts = [tasks > 0 ? `${tasks} 个任务` : '', recorded > 0 ? `${recorded} 条数据与结果记录` : ''].filter((part) => part !== '')
+  return parts.length > 0 ? `项目中的${parts.join('和')}会一起删除，此操作不能撤销。` : '此操作不能撤销。'
+}
+
 function ProjectSection({ project, index, total }: { project: Project; index: number; total: number }) {
   const actions = useActions()
   const [renaming, setRenaming] = useState(false)
@@ -491,6 +360,8 @@ function ProjectSection({ project, index, total }: { project: Project; index: nu
   const counts = columnCounts(project)
   const total_ = project.tasks.length
   const percent = total_ === 0 ? 0 : Math.round((counts.done / total_) * 100)
+  const recordTotals = recordCounts(recordsOf(project))
+  const recorded = recordTotals.data + recordTotals.results
 
   const saveName = (): void => {
     const trimmed = name.trim()
@@ -531,19 +402,15 @@ function ProjectSection({ project, index, total }: { project: Project; index: nu
         ) : (
           <h2
             className="kb-project-name"
-            title="点击重命名"
+            title="打开数据与结果"
             role="button"
             tabIndex={0}
-            aria-label={`${project.name}（按 Enter 重命名）`}
-            onClick={() => {
-              setName(project.name)
-              setRenaming(true)
-            }}
+            aria-label={`${project.name}（按 Enter 打开数据与结果）`}
+            onClick={() => actions.openProject(project.id)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                setName(project.name)
-                setRenaming(true)
+                actions.openProject(project.id)
               }
             }}
           >
@@ -558,6 +425,10 @@ function ProjectSection({ project, index, total }: { project: Project; index: nu
             </span>
           ))}
         </div>
+        <button type="button" className="kb-btn kb-btn-sm kb-open-records" title="打开这个项目的数据与结果" onClick={() => actions.openProject(project.id)}>
+          <RecordsIcon size={14} /> 数据与结果
+          {recorded > 0 ? <span className="kb-count">{recorded}</span> : null}
+        </button>
         <div className="kb-progress" title={`${counts.done}/${total_} 已完成`}>
           <div className="kb-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="完成进度">
             <span style={{ width: `${percent}%` }} />
@@ -628,7 +499,7 @@ function ProjectSection({ project, index, total }: { project: Project; index: nu
                   close()
                   actions.confirm({
                     title: `删除项目「${project.name}」？`,
-                    body: total_ > 0 ? `项目中的 ${total_} 个任务会一起删除，此操作不能撤销。` : '此操作不能撤销。',
+                    body: deleteBody(total_, recorded),
                     confirmLabel: '删除项目',
                     onConfirm: () => {
                       if (actions.dispatch({ type: 'project.delete', projectId: project.id })) actions.toast(`已删除项目「${project.name}」`)
@@ -763,14 +634,6 @@ function ConfirmDialog({ title, body, confirmLabel, onConfirm, onClose }: { titl
 
 // ---------------------------------------------------------------- view
 
-const STATUS_TEXT: Record<SyncStatus, string> = {
-  loading: '加载中',
-  saved: '已保存',
-  saving: '保存中…',
-  offline: '未连接，稍后自动重试',
-  'load-failed': '加载失败',
-}
-
 function Stats({ board }: { board: Board }) {
   let tasks = 0
   let done = 0
@@ -800,11 +663,19 @@ function Stats({ board }: { board: Board }) {
   )
 }
 
+/**
+ * Which project's page is open. Kept outside React so leaving the panel and
+ * coming back (the view unmounts in between) lands on the same page.
+ */
+const navigation: { projectId: string | null } = { projectId: null }
+
 /** The whole board view. */
 export function KanbanView({ sync }: { sync: BoardSync }) {
   const snapshot = useSyncExternalStore(sync.subscribe, sync.getSnapshot)
   const { board, status } = snapshot
   const [creating, setCreating] = useState(false)
+  const [openId, setOpenId] = useState<string | null>(() => navigation.projectId)
+  const scroller = useRef<HTMLDivElement>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [landedId, setLandedId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<{ title: string; body: string; confirmLabel: string; onConfirm: () => void } | null>(null)
@@ -851,6 +722,11 @@ export function KanbanView({ sync }: { sync: BoardSync }) {
     }
   }, [sync])
 
+  const openProject = useCallback((id: string | null) => {
+    navigation.projectId = id
+    setOpenId(id)
+  }, [])
+
   const actions = useMemo<BoardActions>(
     () => ({
       dispatch: (op) => sync.dispatch(op),
@@ -859,19 +735,31 @@ export function KanbanView({ sync }: { sync: BoardSync }) {
       landedId,
       drag,
       confirm: setDialog,
+      openProject,
     }),
-    [sync, toast, land, landedId],
+    [sync, toast, land, landedId, openProject],
   )
 
   const autoColor = PROJECT_COLORS[board.projects.length % PROJECT_COLORS.length]!
   const ready = status !== 'loading' && status !== 'load-failed'
+  const page = ready && openId !== null ? board.projects.find((project) => project.id === openId) : undefined
+
+  // The project is gone (deleted elsewhere): back to the board.
+  useEffect(() => {
+    if (ready && openId !== null && page === undefined) openProject(null)
+  }, [ready, openId, page, openProject])
+  // Each page starts at its top.
+  useEffect(() => {
+    scroller.current?.scrollTo?.({ top: 0 })
+  }, [page?.id])
 
   return (
     <Actions.Provider value={actions}>
       <div className="kb-root">
-        <div className="kb-scroll">
+        <div className="kb-scroll" ref={scroller}>
           <div className="kb-inner">
-            <div className="kb-header">
+            {page ? <RecordsPage key={page.id} project={page} status={status} onBack={() => openProject(null)} /> : null}
+            <div className="kb-header" hidden={page !== undefined}>
               <div>
                 <h1 className="kb-title">
                   <span className="kb-title-mark">
@@ -882,12 +770,7 @@ export function KanbanView({ sync }: { sync: BoardSync }) {
                 {ready ? <Stats board={board} /> : null}
               </div>
               <div className="kb-header-actions">
-                {ready ? (
-                  <span className={'kb-status' + (status === 'saving' ? ' is-saving' : '') + (status === 'offline' ? ' is-offline' : '')} role="status" data-kb-save-status="">
-                    <i />
-                    {STATUS_TEXT[status]}
-                  </span>
-                ) : null}
+                {ready ? <SaveStatus status={status} /> : null}
                 {ready && board.projects.length > 0 ? (
                   <button type="button" className="kb-btn kb-btn-primary" onClick={() => setCreating(true)} disabled={creating}>
                     <PlusIcon size={15} /> 新建项目
@@ -896,7 +779,7 @@ export function KanbanView({ sync }: { sync: BoardSync }) {
               </div>
             </div>
 
-            {status === 'loading' ? (
+            {page ? null : status === 'loading' ? (
               <div className="kb-loading" aria-busy="true" aria-label="加载中">
                 <div className="kb-skeleton" />
                 <div className="kb-skeleton" />
